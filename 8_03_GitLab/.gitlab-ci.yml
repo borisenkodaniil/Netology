@@ -1,0 +1,19 @@
+stages:
+  - test
+  - build
+
+test:
+  stage: test
+  image: golang:1.17
+  tags:
+   - netology
+  script: 
+   - go test ./...
+
+build:
+  stage: build
+  image: golang:1.17
+  tags:
+   - netology
+  script:
+   - go build .
