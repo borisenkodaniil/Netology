@@ -1,0 +1,51 @@
+version: "2.0.2.6"
+
+services:
+  prometheus:
+    image: prom/prometheus
+    container_name: borisenko-dp-netology-prometheus
+    volumes:
+      - /home/vm/netology/prometheus/borisenko-dp-netology-prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - borisenko-dp-my-netology-hw
+
+  node-exporter:
+    image: prom/node-exporter
+    container_name: borisenko-dp-netology-node-exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - borisenko-dp-my-netology-hw
+  
+  pushgateway:
+    image: prom/pushgateway
+    container_name: borisenko-dp-netology-pushgateway
+    ports:
+      - "9091:9091"
+    networks:
+      - borisenko-dp-my-netology-hw
+
+  grafana:
+    image: grafana/grafana
+    container_name: borisenko-dp-netology-grafana
+    volumes:
+      - ./grafana/custom.ini:/etc/grafana/grafana.ini
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - borisenko-dp-my-netology-hw
+
+volumes:
+  prometheus_data: {}
+  grafana_data: {}
+
+networks:
+  borisenko-dp-my-netology-hw:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
