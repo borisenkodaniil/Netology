@@ -1,0 +1,8 @@
+---
+- name: Appache
+  hosts: host1
+  become: yes
+  tasks:
+  
+  roles:
+    - appache
