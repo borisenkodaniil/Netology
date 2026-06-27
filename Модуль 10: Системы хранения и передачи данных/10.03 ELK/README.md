@@ -20,13 +20,13 @@
 
 В файле `docker-compose.yml` был описан сервис `elasticsearch`. В качестве образа использован официальный образ:
 
-```text
+```yaml
 docker.elastic.co/elasticsearch/elasticsearch-wolfi:9.4.2
 ```
 
 В настройках контейнера были изменены параметры:
 
-```text
+```yaml
 - discovery.type=single-node
 - xpack.security.enabled=false
 - cluster.name=borisenko-cluster
@@ -40,7 +40,7 @@ docker.elastic.co/elasticsearch/elasticsearch-wolfi:9.4.2
 
 Также был проброшен порт:
 
-```text
+```yaml
 - 9200:9200
 ```
 
@@ -76,26 +76,26 @@ curl -X GET 'localhost:9200/_cluster/health?pretty'
 
 В качестве образа был использован официальный образ Kibana:
 
-```text
+```yaml
 docker.elastic.co/kibana/kibana-wolfi:9.4.2
 ```
 
 Для доступа к веб-интерфейсу Kibana был проброшен порт:
 
-```text
+```yaml
 - 5601:5601
 ```
 
 Также была добавлена зависимость от Elasticsearch:
 
-```text
+```yaml
 depends_on:
   - elasticsearch
 ```
 
 Для подключения Kibana к Elasticsearch был указан параметр:
 
-```text
+```yaml
 ELASTICSEARCH_HOSTS=http://elasticsearch:9200
 ```
 
@@ -131,6 +131,59 @@ GET /_cluster/health?pretty
 
 ### Ход решения
 
+Для выполнения задания в `docker-compose.yml` были добавлены сервисы `nginx` и `logstash`.
+
+Nginx был запущен на порту `8080`, а директория с логами была проброшена в контейнер:
+
+```yaml
+volumes:
+  - ./logs/nginx:/var/log/nginx
+```
+
+После запуска контейнеров были выполнены запросы к Nginx:
+
+```bash
+curl http://localhost:8080/
+```
+
+В файле `logs/nginx/access.log` появились записи access-лога Nginx.
+
+![nginx logs terminal](./task3_nginx_logs_terminal.png)
+
+Для Logstash был создан pipeline `nginx_logs`.
+Он читает access-лог Nginx из файла `/var/log/nginx/access.log`, разбирает строки лога с помощью `grok` и отправляет данные в `elasticsearch` в индекс `logs_nginx-*`.
+
+Файл состоит из 3-х блоков:
+
+`input` - чтение `access.log`
+`filter` - разбор строки лога через `grok`
+`output` - отправка данных в `elasticsearch`
+
+![logstash config](./task3_logstash_config.png)
+
+После настройки сервисы были запущены командой:
+
+```bash
+docker compose up -d
+```
+
+![logstash compose](./task3_logstash_compose.png)
+
+После обработки логов Logstash отправил данные в Elasticsearch.
+В Kibana был создан Data View для индекса:
+
+```text
+logs_nginx*
+```
+
+![kibana data view](./task3_kibana_data_view.png)
+
+После этого в разделе Discover отображаются логи, записанные в файл `access.log`.
+
+![kibana nginx logs](./task3_kibana_nginx_logs.png)
+
+Был запущен, Logstash прочитал его access-лог, обработал записи и отправил их в Elasticsearch. В Kibana были отображены логи Nginx из индекса `logs_nginx-*`.
+
 ---
 
 ## Задание 4. Filebeat
@@ -142,6 +195,64 @@ GET /_cluster/health?pretty
 *Приведите скриншот интерфейса Kibana, на котором видны логи Nginx, которые были отправлены через Filebeat.*
 
 ### Ход решения
+
+Для выполнения задания был настроен Filebeat для чтения access-лога Nginx.
+
+В файле `configs/filebeat/filebeat.yml` был настроен input для чтения файла:
+
+```text
+/var/log/nginx/access.log
+```
+
+Также был настроен output в Logstash:
+
+```yaml
+output.logstash:
+  hosts: ["logstash:5044"]
+```
+
+Для приёма данных от Filebeat был изменён pipeline Logstash.
+Вместо чтения файла через `input file` был настроен приём данных через `input beats`:
+
+```text
+input {
+  beats {
+    port => 5044
+  }
+}
+```
+
+Далее Logstash разбирает строки access-лога Nginx через `grok` и отправляет данные в Elasticsearch в индекс:
+
+```text
+filebeat-nginx-*
+```
+
+![filebeat logstash config](./task4_filebeat_logstash_config.png)
+
+В `docker-compose.yml` был добавлен сервис `filebeat`, а для Logstash был открыт порт `5044`, на который Filebeat отправляет данные.
+
+![filebeat compose](./task4_filebeat_compose.png)
+
+После запуска контейнеров были выполнены запрос к Nginx:
+
+```bash
+curl http://localhost:8080/
+```
+
+![filebeat terminal](./task4_filebeat_terminal.png)
+
+После обработки логов в Elasticsearch появился индекс с данными, отправленными через Filebeat.
+
+```text
+filebeat-nginx-*
+```
+
+В разделе Discover стали доступны документы с логами Nginx.
+
+![filebeat nginx logs](./task4_kibana_filebeat_logs.png)
+
+Таким образом, поставка логов Nginx была переключена на Filebeat. Filebeat читает access-лог Nginx, отправляет его в Logstash, после чего Logstash обрабатывает данные и записывает их в Elasticsearch.
 
 ---
 
@@ -155,6 +266,53 @@ GET /_cluster/health?pretty
 *Приведите скриншот интерфейса Kibana, на котором будет виден этот лог и напишите лог какого приложения отправляется.*
 
 ### Ход решения
+
+Для выполнения задания было использовано приложение, предоставленное преподавателем.
+
+Приложение написано на Python и генерирует логи в файл `log_gen.log`.
+
+[app](./app/main.py)
+
+В `docker-compose.yml` был добавлен сервис приложения `app`, который запускает файл `main.py`.
+
+```yaml
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app:/app
+    command: python main.py
+
+```
+
+Также был настроен `Filebeat`. Он читает лог приложения из файла `/var/log/app/log_gen.log` и отправляет данные в `Logstash` на порт `5044`.
+
+```yml
+filebeat.inputs:
+  - type: filestream
+    id: app-log
+    enabled: true
+    paths:
+      - /var/log/app/log_gen.log
+
+output.logstash:
+  hosts: ["logstash:5044"]
+```
+
+В `Logstash` был создан `pipeline` для обработки логов приложения.
+
+[task5_app_logs](./configs/logstash/pipelines/task5_app_logs.conf)
+
+![task5_app_compose](./task5_app_compose.png)
+
+В Kibana был создан `Data View` для индекса `logs_app-*`.
+
+![Kibana](./task5_kibana_app_logs.png)
+
+В разделе `Discover` стали доступны логи приложения.
+
+Таким образом, была настроена поставка логов отдельного приложения. Логи приложения записываются в файл, передаются через `Filebeat` в `Logstash`, обрабатываются и сохраняются в `Elasticsearch`. В `Kibana` эти логи успешно отображаются.
 
 ---
 

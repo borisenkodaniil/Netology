@@ -22,19 +22,37 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./configs/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./logs/nginx:/var/log/nginx
 
   logstash:
     image: docker.elastic.co/logstash/logstash:9.4.2
-    user: root
     environment:
       XPACK_MONITORING_ENABLED: "false"
       ES_HOST: "http://elasticsearch:9200"
     depends_on:
       - elasticsearch
       - nginx
+    ports:
+      - "5044:5044"
     volumes:
-      - ./configs/logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml
-      - ./configs/logstash/pipelines:/usr/share/logstash/config/pipelines
+      - ./configs/logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./configs/logstash/pipelines:/usr/share/logstash/config/pipelines:ro
       - ./logs/nginx:/var/log/nginx:ro
+  
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:9.4.2
+    depends_on:
+      - elasticsearch
+      - app
+      - logstash
+    volumes:
+      - ./configs/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./app:/var/log/app:ro
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app:/app
+    command: python main.py
