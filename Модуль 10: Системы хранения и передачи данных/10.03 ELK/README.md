@@ -155,9 +155,9 @@ curl http://localhost:8080/
 
 Файл состоит из 3-х блоков:
 
-`input` - чтение `access.log`
-`filter` - разбор строки лога через `grok`
-`output` - отправка данных в `elasticsearch`
+- `input` - чтение `access.log`
+- `filter` - разбор строки лога через `grok`
+- `output` - отправка данных в `elasticsearch`
 
 ![logstash config](./task3_logstash_config.png)
 
