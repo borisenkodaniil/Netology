@@ -1,0 +1,58 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-wolfi:9.4.2
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - cluster.name=borisenko-cluster
+    ports:
+      - "9200:9200"
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-wolfi:9.4.2
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+  nginx:
+    image: nginx:stable-alpine3.21-perl
+    ports:
+      - "8080:80"
+    volumes:
+      - ./logs/nginx:/var/log/nginx
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:9.4.2
+    environment:
+      XPACK_MONITORING_ENABLED: "false"
+      ES_HOST: "http://elasticsearch:9200"
+    depends_on:
+      - elasticsearch
+      - nginx
+    ports:
+      - "5044:5044"
+    volumes:
+      - ./configs/logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./configs/logstash/pipelines:/usr/share/logstash/config/pipelines:ro
+      - ./logs/nginx:/var/log/nginx:ro
+  
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:9.4.2
+    depends_on:
+      - elasticsearch
+      - app
+      - logstash
+    volumes:
+      - ./configs/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./app:/var/log/app:ro
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./app:/app
+    command: python main.py
