@@ -68,11 +68,22 @@ WHERE film.length > (
 
 ### Ход решения
 
-Сгруппировал платежи по месяцам.
+С помощью `DATE_FORMAT()` сгруппировал платежи по году и месяцу, чтобы одинаковые месяцы не объединялись.
 
 С помощью `SUM()` посчитал сумму платежей, а с помощью `COUNT()` — количество аренд.
 
 Отсортировал результат по сумме платежей и получил месяц с наибольшей суммой.
+
+```sql
+SELECT
+    DATE_FORMAT(payment.payment_date, '%M-%Y') AS month,
+    SUM(payment.amount),
+    COUNT(payment.rental_id)
+FROM payment
+GROUP BY DATE_FORMAT(payment.payment_date, '%M-%Y')
+ORDER BY SUM(payment.amount) DESC
+LIMIT 1;
+```
 
 ![Вывод SQL запроса](./task3_MONTH.png)
 
